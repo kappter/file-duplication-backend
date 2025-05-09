@@ -2,6 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const fs = require('fs').promises;
 const crypto = require('crypto');
+
 const app = express();
 const upload = multer({ dest: 'uploads/' });
 
@@ -14,7 +15,8 @@ app.use((req, res, next) => {
 
 app.post('/upload', upload.array('files', 2), async (req, res) => {
   try {
-    const metadata = await Promise.all(req.files.map(async (file) => {
+    const lastModified = req.body.lastModified || []; // Array of lastModified timestamps
+    const metadata = await Promise.all(req.files.map(async (file, index) => {
       const stats = await fs.stat(file.path);
       const fileBuffer = await fs.readFile(file.path);
       const hash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
@@ -22,7 +24,7 @@ app.post('/upload', upload.array('files', 2), async (req, res) => {
         name: file.originalname,
         size: stats.size,
         type: file.mimetype,
-        created: stats.birthtime.toISOString(),
+        created: lastModified[index] || 'N/A', // Use provided lastModified or 'N/A'
         modified: stats.mtime.toISOString(),
         hash
       };
@@ -31,6 +33,7 @@ app.post('/upload', upload.array('files', 2), async (req, res) => {
     await Promise.all(req.files.map(file => fs.unlink(file.path)));
     res.json(metadata);
   } catch (error) {
+    console.error('Error processing files:', error);
     res.status(500).json({ error: error.message });
   }
 });
